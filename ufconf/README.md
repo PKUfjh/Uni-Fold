@@ -1,5 +1,9 @@
 # How to run the inference code
 All the inference scripts are in `inference_scripts` directory. All scripts are run on GPU by default, if you want to run the scripts on cpu, you should set the flag by `--device "cpu"`.
+
+## Model checkpoint
+The model checkpoint can be downloaded from the link `https://zenodo.org/records/11388944`.
+
 ### denoise mode
 * `run_ufconf_denoise.py`: Runs the full backward process.
 
