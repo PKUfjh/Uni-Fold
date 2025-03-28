@@ -21,7 +21,7 @@ import ufconf.utils as utils
 max_retries = 3  # Maximum number of retries
 retry_delay = 3  # Delay between retries in seconds
 
-def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices,res2_indices, distances):
+def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices,res2_indices, cutoff, eta):
     batch_constants = {
         key: batch[key].squeeze() for key in ("seq_mask", "residue_index", "chain_id")
     }
@@ -78,8 +78,8 @@ def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, 
                 tor_t=tor_t, torh_0=torh_0,
                 res1_indices = res1_indices,
                 res2_indices = res2_indices,
-                distances = distances,
-                eta = 0.2
+                cutoff = cutoff,
+                eta = eta
             )
         batch["noisy_frames"] = f_s
         if tor_s is not None:
@@ -251,11 +251,10 @@ def main(args):
             
         if args.use_guidance:
             guide_csv = os.path.join(args.input_pdbs, f'{Job["guidance_csv"]}.csv')
-            res1_indices, res2_indices, distances = utils.extract_index_and_distance_lists(guide_csv,10)
+            res1_indices, res2_indices = utils.extract_index_lists(guide_csv,10)
         else:
             res1_indices = []
             res2_indices = []
-            distances = []
             
         for replica in tqdm.tqdm(range(Job["num_replica"]), total=Job["num_replica"]) \
             if Job["num_replica"] >= 10 else range(Job["num_replica"]):
@@ -291,7 +290,7 @@ def main(args):
                 featd = diffuse_inputs(featd, diffuser, my_seed, config.diffusion, task="predict")
 
             batch = utils.prepare_batch(featd, lab, args)
-            process_replica(args, model, batch, gpu_diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices, res2_indices,distances)
+            process_replica(args, model, batch, gpu_diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices, res2_indices,cutoff = 30, eta = 0.01)
         print("Denoising inference completed!")
         
     return
