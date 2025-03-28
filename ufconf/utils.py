@@ -167,16 +167,15 @@ def prepare_batch(featd, lab, args):
         
     return batch_device
 
-def extract_index_and_distance_lists(csv_file, top_n=20):
+def extract_index_lists(csv_file, top_n=20):
     """Extract residue index pairs and distances from a CSV file."""
     df = pd.read_csv(csv_file)
     df = df.head(top_n)
 
     res1_indices = df["Residue1_Index"].tolist()
     res2_indices = df["Residue2_Index"].tolist()
-    distances = df["Distance (\u00c5)"].tolist()
 
-    return res1_indices, res2_indices, distances
+    return res1_indices, res2_indices
 
 # handle pdb format files
 def get_pdb(filename):
