@@ -59,12 +59,16 @@ conda install pytorch==2.2.0 torchvision==0.17.0 torchaudio==2.2.0 pytorch-cuda=
 
 ## Clone the Uni-core repository and install
 ```bash
+git clone https://github.com/dptech-corp/Uni-Core
+cd Uni-Core
 pip install -r requirements.txt
 python setup.py install
 ```
 
 ## Clone Uni-Fold repository and install
 ```bash
+git clone https://github.com/PKUfjh/Uni-Fold
+cd Uni-Fold
 pip install .
 ```
 
