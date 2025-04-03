@@ -92,7 +92,10 @@ class EuclideanDiffuser(nn.Module):
         res1_indices,
         res2_indices,
         cutoff = 20,
-        eta = 0.1
+        eta = 0.01,
+        g_decay = 5,
+        decay_radius = 0, 
+        decay_lambda = 0.1
     ):
         '''
         backward transition from timestamp `t` to `s` (s < t).
@@ -107,14 +110,31 @@ class EuclideanDiffuser(nn.Module):
         beta = (1. - gt / gs)[..., None].clamp_max(self.beta_clip)
 
         score = self.score(x_t, xh_0, t)
-        
-        guidance =  self.compute_guidance(x_t, res1_indices, res2_indices, cutoff)
-        
-        # print("beta score",beta * score * self.scale_factor**2)
-        # print("eta guidance", eta * guidance[guidance >0])
 
         # x_s = (2. - (1. - beta).sqrt()) * x_t + beta * score + beta.sqrt() * z * self.scale_factor
-        x_s = (1/(1 - beta).sqrt())*( x_t + beta * score * self.scale_factor**2) + + eta * guidance + ((1 - gs)/(1 - gt)*beta).sqrt() * z * self.scale_factor
+        x_s = (1/(1 - beta).sqrt())*( x_t + beta * score * self.scale_factor**2) + ((1 - gs)/(1 - gt)*beta).sqrt() * z * self.scale_factor
+        for idx1, idx2 in zip(res1_indices,res2_indices):
+            x1, x2 = x_s[idx1], x_s[idx2]
+            # print(f"{idx1} pos is original x1 {x1}")
+            # print(f"{idx2} pos is original x2 {x2}")
+            # Compute the guidance vector
+            dist_current = torch.norm(x2 - x1, dim=-1, keepdim=True)
+            # print("original dist",dist_current)
+        # Compute the guidance vector according to x_s rather than x_t, bc x_s is the one we want to update
+        guidance =  self.compute_guidance(x_s, res1_indices, res2_indices, cutoff,decay_radius, decay_lambda)
+        # print("beta score",beta * score * self.scale_factor**2)
+        # print("eta guidance", eta * guidance[guidance >0])
+        # print("g_decay", g_decay)
+        # print("eta",eta)
+        # x_s = x_s + torch.cos(torch.pi/2 * (t**g_decay - 1)) * eta * guidance 
+        x_s = x_s + eta * guidance 
+        for idx1, idx2 in zip(res1_indices,res2_indices):
+            x1, x2 = x_s[idx1], x_s[idx2]
+            # print(f"{idx1} pos is guided x1 {x1}")
+            # print(f"{idx2} pos is guided x2 {x2}")
+            # Compute the guidance vector
+            dist_current = torch.norm(x2 - x1, dim=-1, keepdim=True)
+            # print("guided dist",dist_current)
         # x_s = torch.where(
         #     s[..., None, None] > 1e-12, x_s, xh_0
         # )
@@ -141,36 +161,71 @@ class EuclideanDiffuser(nn.Module):
         score = (g.sqrt() * x_0 - x_t) / (1. - g) / self.scale_factor**2
         return score
     
-    def compute_guidance(self, x_t, res1_indices, res2_indices, cutoff):
+    def compute_guidance(self, x_t, res1_indices, res2_indices, cutoff, decay_radius=0, decay_lambda=0.1):
         """
-        Compute guidance term for diffusion process based on selected atom pairs.
-        
+        Compute a smooth, propagated guidance term for diffusion, based on atom pair constraints
+        and their neighboring residues with exponential decay, using relative directions for neighboring residue pairs.
+        Additionally, for each res1_index, search for the largest distance pair with res2_index within the offset range
+        and apply guidance calculation.
+
         Args:
-            x_t (torch.Tensor): Current structure positions at time t.
-            beta_t (float): Noise schedule parameter.
-            x_0 (torch.Tensor): Target structure positions.
-            atom_pairs (list): List of (index1, index2) pairs for guidance.
-            
+            x_t (torch.Tensor): Current positions of shape [L, 3], where L is the number of residues/atoms.
+            res1_indices (list[int]): List of first residue indices in constraints.
+            res2_indices (list[int]): List of second residue indices in constraints.
+            cutoff (float): Desired upper-bound distance between residue pairs.
+            decay_radius (int): Number of neighboring residues on each side to apply decayed guidance.
+            decay_lambda (float): Decay rate for exponential weight: exp(-lambda * d), where d is sequence distance.
+
         Returns:
-            torch.Tensor: Guidance term G.
+            torch.Tensor: A tensor of shape [L, 3] representing the smooth guidance vectors.
         """
+        L = x_t.shape[0]
         G = torch.zeros_like(x_t)
 
-        for idx1, idx2 in zip(res1_indices,res2_indices):
+        for idx1, idx2 in zip(res1_indices, res2_indices):
+            # Check the distance between the two residues
             x1, x2 = x_t[idx1], x_t[idx2]
+            dist = torch.norm(x2 - x1).clamp(min=1e-6)
 
-            # Compute the guidance vector
-            dist_current = torch.norm(x2 - x1, dim=-1, keepdim=True)
+            # If distance is smaller than cutoff, no guidance needed
+            if dist < cutoff:
+                continue
+
+            delta = dist - cutoff
+
+            # Loop through the neighboring indices for res2 within the offset range
+            for offset in range(-decay_radius, decay_radius + 1):
+                # Initialize variables to track the maximum distance pair
+                max_dist = -1
+                max_idx1 = None
+
+                # Find the neighboring index for res2 within the range of res1
+                n_idx2 = idx2 + offset
+
+                # Ensure n_idx2 is within bounds and not the same as idx1
+                if 0 <= n_idx2 < L and n_idx2 != idx1:
+                    for offset in range(-decay_radius, decay_radius + 1):
+                        n_idx1 = idx1 + offset
+                        # Ensure n_idx1 is within bounds and not the same as idx2
+                        if 0 <= n_idx1 < L and n_idx1 != idx2:
+                            # Compute the distance to the neighboring residue
+                            dist_to_res2 = torch.norm(x_t[n_idx1] - x_t[n_idx2])
+
+                            # Find the largest distance to idx2
+                            if dist_to_res2 > max_dist:
+                                max_dist = dist_to_res2
+                                max_idx1 = n_idx1
             
-            # print("dist_current",dist_current)
-            # print("dist_target", dist_target)
-            
-            if dist_current < cutoff:
-                pass
-            else:
-                # Compute G as described in the equation
-                direction = (x2 - x1) / dist_current.clamp(min=1e-6)
-                G[idx2] =  - (dist_current - cutoff)**2 * direction
+                    # If a valid neighboring index was found, compute the guidance
+                    if max_idx1 is not None and max_dist > cutoff:
+                        # Compute the exponential decay weight for the guidance
+                        w = torch.exp(-torch.tensor(decay_lambda) * abs(offset))
+
+                        # Compute the relative direction for the larger distance pair
+                        relative_direction = (x_t[n_idx2] - x_t[max_idx1]) / torch.norm (x_t[n_idx2] - x_t[max_idx1]).clamp(min=1e-6)
+
+                        # Apply guidance based on the largest distance pair
+                        G[n_idx2] = -delta * w * relative_direction
 
         return G
 
@@ -651,12 +706,15 @@ class Diffuser(nn.Module):
         res1_indices: list = [],
         res2_indices: list = [],
         cutoff: int = 20,
-        eta: float = 0.1
+        eta: float = 0.01,
+        g_decay: float = 5,
+        decay_radius: int = 0,
+        decay_lambda: float = 0.1
     ):
         r_t, p_t = frames_to_r_p(f_t)
         rh_0, ph_0 = frames_to_r_p(fh_0)
         r_s, _ = self.rot_trans.denoise(r_t, rh_0, frame_gen_mask, t, s)
-        p_s, _ = self.pos_trans.denoise(p_t, ph_0, frame_gen_mask, t, s, res1_indices,res2_indices,cutoff, eta)
+        p_s, _ = self.pos_trans.denoise(p_t, ph_0, frame_gen_mask, t, s, res1_indices,res2_indices,cutoff, eta, g_decay, decay_radius, decay_lambda)
         f_s = r_p_to_frames(r_s, p_s)
         if tor_t is not None:
             assert self.chi_trans is not None

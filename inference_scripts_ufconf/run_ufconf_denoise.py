@@ -21,7 +21,7 @@ import ufconf.utils as utils
 max_retries = 3  # Maximum number of retries
 retry_delay = 3  # Delay between retries in seconds
 
-def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices,res2_indices, cutoff, eta):
+def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices,res2_indices, cutoff, eta, g_decay, decay_radius, decay_lambda):
     batch_constants = {
         key: batch[key].squeeze() for key in ("seq_mask", "residue_index", "chain_id")
     }
@@ -79,7 +79,10 @@ def process_replica(args, model, batch, diffuser, config, Job, output_traj_dir, 
                 res1_indices = res1_indices,
                 res2_indices = res2_indices,
                 cutoff = cutoff,
-                eta = eta
+                eta = eta,
+                g_decay = g_decay,
+                decay_radius = decay_radius, 
+                decay_lambda = decay_lambda
             )
         batch["noisy_frames"] = f_s
         if tor_s is not None:
@@ -251,7 +254,7 @@ def main(args):
             
         if args.use_guidance:
             guide_csv = os.path.join(args.input_pdbs, f'{Job["guidance_csv"]}.csv')
-            res1_indices, res2_indices = utils.extract_index_lists(guide_csv,10)
+            res1_indices, res2_indices = utils.extract_index_lists(guide_csv,200)
         else:
             res1_indices = []
             res2_indices = []
@@ -290,7 +293,7 @@ def main(args):
                 featd = diffuse_inputs(featd, diffuser, my_seed, config.diffusion, task="predict")
 
             batch = utils.prepare_batch(featd, lab, args)
-            process_replica(args, model, batch, gpu_diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices, res2_indices,cutoff = 30, eta = 0.01)
+            process_replica(args, model, batch, gpu_diffuser, config, Job, output_traj_dir, job_name, replica, res1_indices, res2_indices,cutoff = 30, eta = 0.2, g_decay = 1., decay_radius = 20, decay_lambda = 0.1)
         print("Denoising inference completed!")
         
     return
