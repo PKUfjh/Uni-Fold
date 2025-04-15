@@ -850,32 +850,33 @@ def load_features_from_fasta(args, Job, dir_feat_name=None):
     else:
         symmetry_operations = None
 
-    # extract the seq from the input fasta file
+    # Extract the sequence from the input FASTA file
     fasta_path = os.path.join(args.input_pdbs, fasta_name + ".fasta")
+    
     # Initialize lists for sequence IDs and sequences
     seq_ids = []
     seqs = []
 
-    # Parse the fasta file
+    # Parse the FASTA file
     for record in SeqIO.parse(fasta_path, "fasta"):
-        # Use regex to find the chain identifier after "Chain" in the description
+        # Use regex to find the chain identifier after "Chain" in the description, if present
         match = re.search(r"Chain (\w)", record.description)
+        
+        # If a chain identifier is found, append it; otherwise, set chain ID to 'A'
         if match:
-            seq_ids.append(match.group(1))  # Add the letter following "Chain" to seq_ids list
+            seq_ids.append(match.group(1))  # Add the chain identifier to the list
+        else:
+            # Default chain ID as 'A' if not found
+            seq_ids.append("A")
+        
         seqs.append(str(record.seq))
-    # with open(fasta_path, "r") as f:
-    #     seqs = f.readlines()[1].strip()
-    
-    # # extract the chain ID from the input fasta file
-    # chain_id = fasta_name.split("_")[-1]
 
-    # generate sequences from input features
-    # seq_ids = [chain_id]
-    # seqs = [seqs]
     aatype = []
     residue_index = []
     res_list_idx = []
     chain_ids = []
+    
+    # Process the sequences and residues
     for seq_idx in range(len(seqs)):
         seq = seqs[seq_idx]
         chain_id = seq_ids[seq_idx]
@@ -890,16 +891,21 @@ def load_features_from_fasta(args, Job, dir_feat_name=None):
             chain_ids.append(chain_id)
 
     chain_index_map = [(c, r, i) for c,r,i in zip(chain_ids, residue_index, res_list_idx)]
-    feat = {
-        'aatype' : np.array(aatype),
-        'residue_index' : np.array(residue_index),
-        'pdb_idx' : chain_index_map
-    }
     
+    # Create feature dictionary
+    feat = {
+        'aatype': np.array(aatype),
+        'residue_index': np.array(residue_index),
+        'pdb_idx': chain_index_map
+    }
+
+    # Apply chain feature mapping (if necessary)
     feat = chain_feat_map(feat)
 
+    # Initialize list to store all chain labels
     all_chain_labels = []
     seq_ids = sorted(list(feat.keys()))
+    
     for key in seq_ids:
         print("key", key)
         labels = {
@@ -907,10 +913,12 @@ def load_features_from_fasta(args, Job, dir_feat_name=None):
         }
         all_chain_labels.append(labels)
         labels["resolution"] = np.array([0.])
+        
+        # Save the labels to a file
         pickle.dump(labels, gzip.open(
             f"{dir_feat_name}/{key}.label.pkl.gz", "wb"))
-            
-    # # generate all the MSA for the given sequence
+    
+    # Generate all the MSA for the given sequence (if applicable)
     seqs, seq_ids, feat = make_input_features(
         dir_feat_name,
         seqs,
