@@ -43,7 +43,7 @@ python run_ufconf_interpolate.py -t example_ufconf/1ake_4ake_inter.json -i input
 
 ## guidance mode
 ```bash
-python run_ufconf_denoise.py -t example_ufconf/1ake_with_guidance.json -i ./input_fastas -c checkpoint.pt -o ./ufconf_out --use_guidance
+python run_ufconf_denoise.py -t example_ufconf/O00148.json -i ./input_fastas -c checkpoint.pt -o ./ufconf_out --use_guidance
  ```
 
 # Installation

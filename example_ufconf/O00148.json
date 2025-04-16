@@ -1,0 +1,11 @@
+{
+    "O00148": {
+        "fasta": "O00148",
+        "guidance_csv": "O00148_pairs",
+        "initial_t": 1.0,
+        "num_replica": 100,
+        "num_steps": 10,
+        "inf_steps": 30,
+        "save_trajectory": true
+    }
+}
