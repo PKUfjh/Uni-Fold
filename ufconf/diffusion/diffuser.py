@@ -91,7 +91,7 @@ class EuclideanDiffuser(nn.Module):
         s: torch.Tensor,     # [*]
         res1_indices,
         res2_indices,
-        cutoff = 20,
+        cutoff_list,
         eta = 0.01,
         g_decay = 5,
         decay_radius = 0, 
@@ -121,7 +121,7 @@ class EuclideanDiffuser(nn.Module):
             dist_current = torch.norm(x2 - x1, dim=-1, keepdim=True)
             # print("original dist",dist_current)
         # Compute the guidance vector according to x_s rather than x_t, bc x_s is the one we want to update
-        guidance =  self.compute_guidance(x_s, res1_indices, res2_indices, cutoff,decay_radius, decay_lambda)
+        guidance =  self.compute_guidance(x_s, res1_indices, res2_indices, cutoff_list,decay_radius, decay_lambda)
         # print("beta score",beta * score * self.scale_factor**2)
         # print("eta guidance", eta * guidance[guidance >0])
         # print("g_decay", g_decay)
@@ -161,7 +161,7 @@ class EuclideanDiffuser(nn.Module):
         score = (g.sqrt() * x_0 - x_t) / (1. - g) / self.scale_factor**2
         return score
     
-    def compute_guidance(self, x_t, res1_indices, res2_indices, cutoff, decay_radius=0, decay_lambda=0.1):
+    def compute_guidance(self, x_t, res1_indices, res2_indices, cutoff_list, decay_radius=0, decay_lambda=0.1):
         """
         Compute a smooth, propagated guidance term for diffusion, based on atom pair constraints
         and their neighboring residues with exponential decay, using relative directions for neighboring residue pairs.
@@ -172,7 +172,7 @@ class EuclideanDiffuser(nn.Module):
             x_t (torch.Tensor): Current positions of shape [L, 3], where L is the number of residues/atoms.
             res1_indices (list[int]): List of first residue indices in constraints.
             res2_indices (list[int]): List of second residue indices in constraints.
-            cutoff (float): Desired upper-bound distance between residue pairs.
+            cutoff_list (list[float]): List of desired upper-bound distance between residue pairs.
             decay_radius (int): Number of neighboring residues on each side to apply decayed guidance.
             decay_lambda (float): Decay rate for exponential weight: exp(-lambda * d), where d is sequence distance.
 
@@ -182,7 +182,7 @@ class EuclideanDiffuser(nn.Module):
         L = x_t.shape[0]
         G = torch.zeros_like(x_t)
 
-        for idx1, idx2 in zip(res1_indices, res2_indices):
+        for idx1, idx2, cutoff in zip(res1_indices, res2_indices, cutoff_list):
             # Check the distance between the two residues
             x1, x2 = x_t[idx1], x_t[idx2]
             dist = torch.norm(x2 - x1).clamp(min=1e-6)
@@ -204,17 +204,13 @@ class EuclideanDiffuser(nn.Module):
 
                 # Ensure n_idx2 is within bounds and not the same as idx1
                 if 0 <= n_idx2 < L and n_idx2 != idx1:
-                    for offset in range(-decay_radius, decay_radius + 1):
-                        n_idx1 = idx1 + offset
-                        # Ensure n_idx1 is within bounds and not the same as idx2
-                        if 0 <= n_idx1 < L and n_idx1 != idx2:
-                            # Compute the distance to the neighboring residue
-                            dist_to_res2 = torch.norm(x_t[n_idx1] - x_t[n_idx2])
-
-                            # Find the largest distance to idx2
-                            if dist_to_res2 > max_dist:
-                                max_dist = dist_to_res2
-                                max_idx1 = n_idx1
+                    # Compute the distance to the neighboring residue
+                    dist_to_res2 = torch.norm(x_t[idx1] - x_t[n_idx2])
+                    
+                    # Find the largest distance to idx2
+                    if dist_to_res2 > max_dist:
+                        max_dist = dist_to_res2
+                        max_idx1 = idx1
             
                     # If a valid neighboring index was found, compute the guidance
                     if max_idx1 is not None and max_dist > cutoff:
@@ -705,7 +701,7 @@ class Diffuser(nn.Module):
         torh_0: torch.Tensor = None,
         res1_indices: list = [],
         res2_indices: list = [],
-        cutoff: int = 20,
+        cutoff_list: list = [],
         eta: float = 0.01,
         g_decay: float = 5,
         decay_radius: int = 0,
@@ -714,7 +710,7 @@ class Diffuser(nn.Module):
         r_t, p_t = frames_to_r_p(f_t)
         rh_0, ph_0 = frames_to_r_p(fh_0)
         r_s, _ = self.rot_trans.denoise(r_t, rh_0, frame_gen_mask, t, s)
-        p_s, _ = self.pos_trans.denoise(p_t, ph_0, frame_gen_mask, t, s, res1_indices,res2_indices,cutoff, eta, g_decay, decay_radius, decay_lambda)
+        p_s, _ = self.pos_trans.denoise(p_t, ph_0, frame_gen_mask, t, s, res1_indices,res2_indices,cutoff_list, eta, g_decay, decay_radius, decay_lambda)
         f_s = r_p_to_frames(r_s, p_s)
         if tor_t is not None:
             assert self.chi_trans is not None

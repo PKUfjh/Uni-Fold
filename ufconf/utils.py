@@ -174,8 +174,9 @@ def extract_index_lists(csv_file, top_n=20):
 
     res1_indices = df["Residue1_Index"].tolist()
     res2_indices = df["Residue2_Index"].tolist()
+    cutoff_list = df["ArmLength"].tolist()
 
-    return res1_indices, res2_indices
+    return res1_indices, res2_indices, cutoff_list
 
 # handle pdb format files
 def get_pdb(filename):
