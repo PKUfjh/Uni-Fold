@@ -24,6 +24,11 @@ If provide the `.cif` file as input:
 python run_ufconf_denoise.py -t example_ufconf/1ake_from_pdb.json -i input_pdbs/ -c checkpoint.pt -o ./ufconf_out --from_cif
 ```
 
+One can also multimer chains as input:
+```bash
+python run_ufconf_denoise.py -t example_ufconf/3hfm_from_fasta.json -i input_fastas/ -c checkpoint.pt -o ./ufconf_out
+```
+
 If you are in machines without web access, execute the msa generation code first
 ```bash
 python extract_msa_fastas.py -t example_ufconf/1ake_from_fasta.json -i input_fastas/ -o ./ufconf_out
