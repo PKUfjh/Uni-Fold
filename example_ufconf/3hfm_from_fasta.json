@@ -1,0 +1,10 @@
+{
+    "3hfm": {
+        "fasta": "3HFM",
+        "initial_t": 1.0,
+        "num_replica": 5,
+        "num_steps": 10,
+        "inf_steps": 30,
+        "save_trajectory": true
+    }
+}
